@@ -1,9 +1,9 @@
 module github.com/jesseduffield/lazygit
 
-go 1.25.0
+go 1.24
 
 // This is necessary to ignore test files when executing gofumpt.
-ignore ./test
+// ignore ./test
 
 require (
 	dario.cat/mergo v1.0.1

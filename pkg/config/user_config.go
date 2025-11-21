@@ -321,6 +321,8 @@ type GitConfig struct {
 	RemoteBranchSortOrder string `yaml:"remoteBranchSortOrder" jsonschema:"enum=date,enum=alphabetical"`
 	// When copying commit hashes to the clipboard, truncate them to this length. Set to 40 to disable truncation.
 	TruncateCopiedCommitHashesTo int `yaml:"truncateCopiedCommitHashesTo"`
+	// AI-powered commit message generation
+	AI AIConfig `yaml:"ai"`
 }
 
 type PagerType string
@@ -387,6 +389,17 @@ type CommitPrefixConfig struct {
 	Pattern string `yaml:"pattern" jsonschema:"example=^\\w+\\/(\\w+-\\w+).*"`
 	// Replace directive. E.g. for 'feature/AB-123' to start the commit message with 'AB-123 ' use "[$1] "
 	Replace string `yaml:"replace" jsonschema:"example=[$1]"`
+}
+
+type AIConfig struct {
+	// If true, enable AI-powered commit message generation
+	Enabled bool `yaml:"enabled"`
+	// Custom prompt for commit message generation (optional)
+	Prompt string `yaml:"prompt"`
+	// Timeout in seconds for API calls
+	Timeout int `yaml:"timeout" jsonschema:"minimum=1"`
+	// If true, fall back to manual input if AI generation fails
+	FallbackOnError bool `yaml:"fallbackOnError"`
 }
 
 type UpdateConfig struct {

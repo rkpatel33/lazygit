@@ -114,6 +114,9 @@ type IGuiCommon interface {
 
 	// Returns true if we're in a demo recording/playback
 	InDemo() bool
+
+	// Generate AI-powered commit message (if enabled in config)
+	GenerateAICommitMessage() string
 }
 
 type IModeMgr interface {
