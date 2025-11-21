@@ -179,33 +179,34 @@ func (self *WorkingTreeHelper) HandleWIPCommitPress() error {
 }
 
 func (self *WorkingTreeHelper) HandleCommitPress() error {
+	// Always try AI generation first (if enabled)
+	aiMessage := self.c.GenerateAICommitMessage()
+	if aiMessage != "" {
+		return self.HandleCommitPressWithMessage(aiMessage, false)
+	}
+
+	// Fall back to preserved message if AI didn't generate
 	message := self.c.Contexts().CommitMessage.GetPreservedMessageAndLogError()
 
+	// If no preserved message, try commit prefix configs
 	if message == "" {
-		// Try to generate AI commit message first
-		aiMessage := self.c.GenerateAICommitMessage()
-		if aiMessage != "" {
-			message = aiMessage
-		} else {
-			// Fall back to commit prefix configs
-			commitPrefixConfigs := self.commitPrefixConfigsForRepo()
-			for _, commitPrefixConfig := range commitPrefixConfigs {
-				prefixPattern := commitPrefixConfig.Pattern
-				if prefixPattern == "" {
-					continue
-				}
-				prefixReplace := commitPrefixConfig.Replace
-				branchName := self.refHelper.GetCheckedOutRef().Name
-				rgx, err := regexp.Compile(prefixPattern)
-				if err != nil {
-					return fmt.Errorf("%s: %s", self.c.Tr.CommitPrefixPatternError, err.Error())
-				}
+		commitPrefixConfigs := self.commitPrefixConfigsForRepo()
+		for _, commitPrefixConfig := range commitPrefixConfigs {
+			prefixPattern := commitPrefixConfig.Pattern
+			if prefixPattern == "" {
+				continue
+			}
+			prefixReplace := commitPrefixConfig.Replace
+			branchName := self.refHelper.GetCheckedOutRef().Name
+			rgx, err := regexp.Compile(prefixPattern)
+			if err != nil {
+				return fmt.Errorf("%s: %s", self.c.Tr.CommitPrefixPatternError, err.Error())
+			}
 
-				if rgx.MatchString(branchName) {
-					prefix := rgx.ReplaceAllString(branchName, prefixReplace)
-					message = prefix
-					break
-				}
+			if rgx.MatchString(branchName) {
+				prefix := rgx.ReplaceAllString(branchName, prefixReplace)
+				message = prefix
+				break
 			}
 		}
 	}
