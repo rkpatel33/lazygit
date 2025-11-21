@@ -16,7 +16,8 @@ func (gui *Gui) informationStr() string {
 	if gui.g.Mouse {
 		donate := style.FgMagenta.Sprint(style.PrintHyperlink(gui.c.Tr.Donate, constants.Links.Donate))
 		askQuestion := style.FgYellow.Sprint(style.PrintHyperlink(gui.c.Tr.AskQuestion, constants.Links.Discussions))
-		return fmt.Sprintf("%s %s %s", donate, askQuestion, gui.Config.GetVersion())
+		aiIndicator := style.FgCyan.Sprint("󰚩 AI")
+		return fmt.Sprintf("%s %s %s %s", donate, askQuestion, aiIndicator, gui.Config.GetVersion())
 	}
 
 	return gui.Config.GetVersion()
