@@ -97,6 +97,7 @@ func (gui *Gui) GenerateAICommitMessage() string {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
 		gui.Log.Error("ANTHROPIC_API_KEY environment variable not set")
+		gui.c.Toast("AI commit generation failed: API key not set")
 		if aiConfig.FallbackOnError {
 			return ""
 		}
@@ -105,6 +106,7 @@ func (gui *Gui) GenerateAICommitMessage() string {
 
 	// Get the staged diff
 	gui.Log.Info("Getting staged diff for AI commit generation")
+	gui.c.Toast("Generating AI commit message...")
 	diff, err := gui.getStagedDiff()
 	if err != nil {
 		gui.Log.Errorf("Failed to get staged diff: %v", err)
@@ -162,6 +164,7 @@ func (gui *Gui) GenerateAICommitMessage() string {
 	message = cleanMarkdownFormatting(message)
 
 	gui.Log.Infof("Cleaned commit message (%d chars)", len(message))
+	gui.c.Toast("AI commit message generated successfully")
 
 	return message
 }
