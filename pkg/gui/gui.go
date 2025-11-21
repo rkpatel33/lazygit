@@ -813,7 +813,7 @@ func (gui *Gui) viewTabMap() map[string][]context.TabView {
 		},
 		"files": {
 			{
-				Tab:      gui.c.Tr.FilesTitle,
+				Tab: lo.Ternary(gui.c.UserConfig().Git.AI.Enabled, "󰚩 " + gui.c.Tr.FilesTitle, gui.c.Tr.FilesTitle),
 				ViewName: "files",
 			},
 			context.TabView{

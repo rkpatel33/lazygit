@@ -146,7 +146,9 @@ func (gui *Gui) GenerateAICommitMessage() string {
 
 	// Make API call
 	gui.c.LogCommand(fmt.Sprintf("Calling Anthropic API (timeout: %ds)...", timeout), false)
+	startTime := time.Now()
 	message, err := gui.callAnthropicAPI(ctx, apiKey, fullPrompt)
+	elapsed := time.Since(startTime)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			gui.c.LogCommand("Error: AI commit generation timed out", false)
@@ -159,7 +161,7 @@ func (gui *Gui) GenerateAICommitMessage() string {
 		return ""
 	}
 
-	gui.c.LogCommand(fmt.Sprintf("AI generated commit message (%d characters)", len(message)), false)
+	gui.c.LogCommand(fmt.Sprintf("AI generated commit message (%d characters) (%dms)", len(message), elapsed.Milliseconds()), false)
 
 	// Clean markdown formatting (backticks, code fences)
 	message = cleanMarkdownFormatting(message)

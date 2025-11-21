@@ -187,7 +187,11 @@ func (gui *Gui) configureViewProperties() {
 	gui.Views.Remotes.Title = gui.c.Tr.RemotesTitle
 	gui.Views.Worktrees.Title = gui.c.Tr.WorktreesTitle
 	gui.Views.Tags.Title = gui.c.Tr.TagsTitle
-	gui.Views.Files.Title = gui.c.Tr.FilesTitle
+	if gui.c.UserConfig().Git.AI.Enabled {
+		gui.Views.Files.Title = "󰚩 " + gui.c.Tr.FilesTitle
+	} else {
+		gui.Views.Files.Title = gui.c.Tr.FilesTitle
+	}
 	gui.Views.PatchBuilding.Title = gui.c.Tr.Patch
 	gui.Views.PatchBuildingSecondary.Title = gui.c.Tr.CustomPatch
 	gui.Views.MergeConflicts.Title = gui.c.Tr.MergeConflictsTitle

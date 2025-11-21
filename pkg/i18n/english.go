@@ -663,6 +663,7 @@ type TranslationSet struct {
 	SurePasteCommitMessage                string
 	CommitMessage                         string
 	CommitMessageBody                     string
+	GeneratingCommitMessage               string
 	CommitSubject                         string
 	CommitAuthor                          string
 	CommitTags                            string
@@ -1765,6 +1766,7 @@ func EnglishTranslationSet() *TranslationSet {
 		SurePasteCommitMessage:                   "Pasting will overwrite the current commit message, continue?",
 		CommitMessage:                            "Commit message (subject and body)",
 		CommitMessageBody:                        "Commit message body",
+		GeneratingCommitMessage:                  "Generating AI commit message",
 		CommitSubject:                            "Commit subject",
 		CommitAuthor:                             "Commit author",
 		CommitTags:                               "Commit tags",

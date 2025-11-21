@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/config"
@@ -179,12 +180,24 @@ func (self *WorkingTreeHelper) HandleWIPCommitPress() error {
 }
 
 func (self *WorkingTreeHelper) HandleCommitPress() error {
-	// Always try AI generation first (if enabled)
-	aiMessage := self.c.GenerateAICommitMessage()
-	if aiMessage != "" {
-		return self.HandleCommitPressWithMessage(aiMessage, false)
+	// Check if AI is enabled
+	aiConfig := self.c.UserConfig().Git.AI
+	if aiConfig.Enabled {
+		// Run AI generation asynchronously so logs stream in real-time
+		return self.c.WithWaitingStatus(self.c.Tr.GeneratingCommitMessage, func(task gocui.Task) error {
+			aiMessage := self.c.GenerateAICommitMessage()
+			if aiMessage != "" {
+				return self.HandleCommitPressWithMessage(aiMessage, false)
+			}
+			// If AI failed, fall through to normal flow
+			return self.handleCommitPressWithoutAI()
+		})
 	}
 
+	return self.handleCommitPressWithoutAI()
+}
+
+func (self *WorkingTreeHelper) handleCommitPressWithoutAI() error {
 	// Fall back to preserved message if AI didn't generate
 	message := self.c.Contexts().CommitMessage.GetPreservedMessageAndLogError()
 

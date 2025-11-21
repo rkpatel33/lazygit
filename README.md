@@ -119,6 +119,7 @@ If you're a mere mortal like me and you're tired of hearing how powerful git is 
 - [Configuration](#configuration)
   - [Custom Pagers](#custom-pagers)
   - [Custom Commands](#custom-commands)
+  - [AI Commit Messages](#ai-commit-messages)
   - [Git flow support](#git-flow-support)
 - [Contributing](#contributing)
   - [Debugging Locally](#debugging-locally)
@@ -574,6 +575,47 @@ See the [docs](docs/Custom_Pagers.md)
 If lazygit is missing a feature, there's a good chance you can implement it yourself with a custom command!
 
 See the [docs](docs/Custom_Command_Keybindings.md)
+
+### AI Commit Messages
+
+Lazygit supports AI-powered commit message generation using Anthropic's Claude API. When enabled, pressing `c` in the Files panel will automatically generate a commit message based on your staged changes.
+
+**Setup:**
+
+1. Set the `ANTHROPIC_API_KEY` environment variable:
+   ```sh
+   export ANTHROPIC_API_KEY="your-api-key-here"
+   ```
+
+2. Enable AI in your lazygit config (`~/.config/lazygit/config.yml`):
+   ```yaml
+   git:
+     ai:
+       enabled: true
+       # Optional: customize the timeout (default: 30 seconds)
+       timeout: 30
+       # Optional: fallback to manual input if AI fails (default: false)
+       fallbackOnError: false
+       # Optional: provide a custom prompt (otherwise uses built-in prompt)
+       prompt: ""
+   ```
+
+**Features:**
+
+- Press `c` to generate a commit message automatically
+- Each press regenerates a new message based on your staged changes
+- When AI is enabled, the Files panel shows an 󰚩 indicator
+- Generated commits include a footer crediting the AI
+
+**Example config:**
+
+```yaml
+git:
+  ai:
+    enabled: true
+    timeout: 30
+    fallbackOnError: true
+```
 
 ### Git flow support
 
