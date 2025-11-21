@@ -85,18 +85,19 @@ Analyze the git diff below and generate an appropriate commit message:`
 // - The API call fails and fallbackOnError is true
 // - The API call times out
 func (gui *Gui) GenerateAICommitMessage() string {
+	gui.c.LogAction("Generate AI Commit Message")
 	aiConfig := gui.Config.GetUserConfig().Git.AI
 
 	// Check if AI commits are enabled
 	if !aiConfig.Enabled {
-		gui.Log.Info("AI commit generation is disabled")
+		gui.c.LogCommand("AI commit generation is disabled in config", false)
 		return ""
 	}
 
 	// Get API key from environment
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
-		gui.Log.Error("ANTHROPIC_API_KEY environment variable not set")
+		gui.c.LogCommand("Error: ANTHROPIC_API_KEY environment variable not set", false)
 		gui.c.Toast("AI commit generation failed: API key not set")
 		if aiConfig.FallbackOnError {
 			return ""
@@ -105,11 +106,11 @@ func (gui *Gui) GenerateAICommitMessage() string {
 	}
 
 	// Get the staged diff
-	gui.Log.Info("Getting staged diff for AI commit generation")
+	gui.c.LogCommand("Getting staged diff...", false)
 	gui.c.Toast("Generating AI commit message...")
 	diff, err := gui.getStagedDiff()
 	if err != nil {
-		gui.Log.Errorf("Failed to get staged diff: %v", err)
+		gui.c.LogCommand(fmt.Sprintf("Error: Failed to get staged diff: %v", err), false)
 		if aiConfig.FallbackOnError {
 			return ""
 		}
@@ -117,7 +118,7 @@ func (gui *Gui) GenerateAICommitMessage() string {
 	}
 
 	if diff == "" {
-		gui.Log.Warn("No staged changes found")
+		gui.c.LogCommand("No staged changes found", false)
 		return ""
 	}
 
@@ -125,9 +126,9 @@ func (gui *Gui) GenerateAICommitMessage() string {
 	prompt := aiConfig.Prompt
 	if prompt == "" {
 		prompt = defaultCommitPrompt
-		gui.Log.Info("Using default Claude Code style prompt")
+		gui.c.LogCommand("Using default commit message prompt", false)
 	} else {
-		gui.Log.Info("Using custom prompt from config")
+		gui.c.LogCommand("Using custom prompt from config", false)
 	}
 
 	// Build the full prompt with diff
@@ -144,13 +145,13 @@ func (gui *Gui) GenerateAICommitMessage() string {
 	defer cancel()
 
 	// Make API call
-	gui.Log.Info("Calling Anthropic API to generate commit message")
+	gui.c.LogCommand(fmt.Sprintf("Calling Anthropic API (timeout: %ds)...", timeout), false)
 	message, err := gui.callAnthropicAPI(ctx, apiKey, fullPrompt)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			gui.Log.Error("AI commit generation timed out")
+			gui.c.LogCommand("Error: AI commit generation timed out", false)
 		} else {
-			gui.Log.Errorf("AI commit generation failed: %v", err)
+			gui.c.LogCommand(fmt.Sprintf("Error: AI commit generation failed: %v", err), false)
 		}
 		if aiConfig.FallbackOnError {
 			return ""
@@ -158,12 +159,12 @@ func (gui *Gui) GenerateAICommitMessage() string {
 		return ""
 	}
 
-	gui.Log.Infof("AI generated commit message (%d chars)", len(message))
+	gui.c.LogCommand(fmt.Sprintf("AI generated commit message (%d characters)", len(message)), false)
 
 	// Clean markdown formatting (backticks, code fences)
 	message = cleanMarkdownFormatting(message)
 
-	gui.Log.Infof("Cleaned commit message (%d chars)", len(message))
+	gui.c.LogCommand("Successfully generated and cleaned commit message", false)
 	gui.c.Toast("AI commit message generated successfully")
 
 	return message
