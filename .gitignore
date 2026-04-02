@@ -33,5 +33,6 @@ coverage.out
 result
 result-*
 .direnv
+.env
 .envrc
 .DS_Store

@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -94,14 +96,11 @@ func (gui *Gui) GenerateAICommitMessage() string {
 		return ""
 	}
 
-	// Get API key from environment
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
-	if apiKey == "" {
-		gui.c.LogCommand("Error: ANTHROPIC_API_KEY environment variable not set", false)
-		gui.c.Toast("AI commit generation failed: API key not set")
-		if aiConfig.FallbackOnError {
-			return ""
-		}
+	// Get API key from .env file in the repo root
+	apiKey, err := loadEnvValue("ANTHROPIC_API_KEY")
+	if err != nil || apiKey == "" {
+		gui.c.LogCommand("Error: ANTHROPIC_API_KEY not found in .env file", false)
+		gui.c.Toast("AI commit generation failed: API key not in .env")
 		return ""
 	}
 
@@ -245,6 +244,30 @@ func (gui *Gui) callAnthropicAPI(ctx context.Context, apiKey string, prompt stri
 	}
 
 	return apiResp.Content[0].Text, nil
+}
+
+// loadEnvValue reads a key from the .env file in the git repo root.
+func loadEnvValue(key string) (string, error) {
+	root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", err
+	}
+	envPath := filepath.Join(strings.TrimSpace(string(root)), ".env")
+	f, err := os.Open(envPath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	prefix := key + "="
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(line[len(prefix):]), nil
+		}
+	}
+	return "", fmt.Errorf("%s not found in %s", key, envPath)
 }
 
 // cleanMarkdownFormatting removes markdown code fences and backticks that
