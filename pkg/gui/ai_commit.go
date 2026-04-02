@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/jesseduffield/lazygit/pkg/config"
 )
 
 // Anthropic API types for making direct API calls
@@ -99,8 +101,8 @@ func (gui *Gui) GenerateAICommitMessage() string {
 	// Get API key from .env file in the repo root
 	apiKey, err := loadEnvValue("ANTHROPIC_API_KEY")
 	if err != nil || apiKey == "" {
-		gui.c.LogCommand("Error: ANTHROPIC_API_KEY not found in .env file", false)
-		gui.c.Toast("AI commit generation failed: API key not in .env")
+		gui.c.LogCommand(fmt.Sprintf("Error: ANTHROPIC_API_KEY not found in .env file: %v", err), false)
+		gui.c.Toast(fmt.Sprintf("AI commit failed: %v", err))
 		return ""
 	}
 
@@ -246,16 +248,12 @@ func (gui *Gui) callAnthropicAPI(ctx context.Context, apiKey string, prompt stri
 	return apiResp.Content[0].Text, nil
 }
 
-// loadEnvValue reads a key from the .env file in the git repo root.
+// loadEnvValue reads a key from the .env file in the lazygit config directory.
 func loadEnvValue(key string) (string, error) {
-	root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		return "", err
-	}
-	envPath := filepath.Join(strings.TrimSpace(string(root)), ".env")
+	envPath := filepath.Join(config.ConfigDir(), ".env")
 	f, err := os.Open(envPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("cannot open %s: %w", envPath, err)
 	}
 	defer f.Close()
 

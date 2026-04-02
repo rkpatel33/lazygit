@@ -1,0 +1,42 @@
+# lazygit (personal fork)
+
+## Build & Run
+
+- `just build` — build binary with version info to `./lazygit`
+- `make build` — debug build (no optimizations)
+- `make run` — build and run
+- `make run-debug` — run with debug logging (view with `make print-log` in another tab)
+
+## Test
+
+- `make unit-test` — unit tests (`go test ./... -short`)
+- `make integration-test-tui` — interactive integration test runner
+- `make test` — all tests (unit + integration)
+
+## Lint & Format
+
+- `make lint` — golangci-lint
+- `make format` — gofumpt
+
+## Custom Modifications (fork-specific)
+
+- **AI commit messages**: `pkg/gui/ai_commit.go` — calls Anthropic API to generate commit messages from staged diff
+- **API key**: stored in `~/.config/lazygit/.env` as `ANTHROPIC_API_KEY`
+- **Config**: `pkg/config/user_config.go` `AIConfig` struct — enabled, prompt, timeout, fallbackOnError
+- **UI**: AI indicator icon (󰚩) in Files panel title and information panel
+
+## Architecture
+
+- `pkg/gui/` — UI layer (gocui-based TUI)
+- `pkg/commands/` — git command wrappers
+- `pkg/config/` — user/app configuration
+- `pkg/integration/tests/` — integration tests (robot-driven TUI tests)
+- `pkg/i18n/` — translations
+
+## Gotchas
+
+- Binary at `./lazygit` is what `lg` alias points to — must `just build` after code changes
+- Config dir is `~/.config/lazygit/` (XDG), not `~/Library/Application Support/lazygit/`
+- Lazygit runs inside other repos — `git rev-parse` resolves to the *target* repo, not lazygit source. Use `config.ConfigDir()` for lazygit's own files.
+- Integration tests need `go generate ./...` if test list changes
+- User prefers Justfile for custom build targets; don't add to Makefile
