@@ -183,6 +183,12 @@ func (self *WorkingTreeHelper) HandleCommitPress() error {
 	// Check if AI is enabled
 	aiConfig := self.c.UserConfig().Git.AI
 	if aiConfig.Enabled {
+		// Skip AI generation if a preserved commit message already exists
+		preservedMessage := self.c.Contexts().CommitMessage.GetPreservedMessageAndLogError()
+		if preservedMessage != "" {
+			return self.HandleCommitPressWithMessage(preservedMessage, false)
+		}
+
 		// Run AI generation asynchronously so logs stream in real-time
 		return self.c.WithWaitingStatus(self.c.Tr.GeneratingCommitMessage, func(task gocui.Task) error {
 			aiMessage := self.c.GenerateAICommitMessage()
