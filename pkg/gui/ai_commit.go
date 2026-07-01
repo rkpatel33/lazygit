@@ -18,6 +18,22 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/config"
 )
 
+const (
+	aiProviderAnthropic = "anthropic"
+	aiProviderGemini    = "gemini"
+
+	defaultAnthropicModel = "claude-sonnet-4-5-20250929"
+	defaultGeminiModel    = "gemini-2.5-flash"
+
+	defaultAIMaxTokens = 500
+)
+
+type aiCommitSettings struct {
+	provider string
+	model    string
+	envKey   string
+}
+
 // Anthropic API types for making direct API calls
 type anthropicRequest struct {
 	Model     string             `json:"model"`
@@ -43,6 +59,39 @@ type anthropicContent struct {
 type anthropicError struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
+}
+
+// Gemini API types for making direct API calls
+type geminiRequest struct {
+	Contents         []geminiContent         `json:"contents"`
+	GenerationConfig geminiGenerationConfig  `json:"generationConfig"`
+}
+
+type geminiContent struct {
+	Parts []geminiPart `json:"parts"`
+}
+
+type geminiPart struct {
+	Text string `json:"text"`
+}
+
+type geminiGenerationConfig struct {
+	MaxOutputTokens int `json:"maxOutputTokens"`
+}
+
+type geminiResponse struct {
+	Candidates []geminiCandidate `json:"candidates"`
+	Error      *geminiError      `json:"error,omitempty"`
+}
+
+type geminiCandidate struct {
+	Content geminiContent `json:"content"`
+}
+
+type geminiError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Status  string `json:"status"`
 }
 
 // Default prompt following Claude Code's commit message style
@@ -81,7 +130,37 @@ Guidelines:
 
 Analyze the git diff below and generate an appropriate commit message:`
 
-// generateAICommitMessage calls the Anthropic API directly to create
+func resolveAICommitSettings(aiConfig config.AIConfig) aiCommitSettings {
+	provider := strings.ToLower(strings.TrimSpace(aiConfig.Provider))
+	if provider == "" {
+		provider = aiProviderAnthropic
+	}
+
+	model := strings.TrimSpace(aiConfig.Model)
+
+	switch provider {
+	case aiProviderGemini:
+		if model == "" {
+			model = defaultGeminiModel
+		}
+		return aiCommitSettings{
+			provider: aiProviderGemini,
+			model:    model,
+			envKey:   "GEMINI_API_KEY",
+		}
+	default:
+		if model == "" {
+			model = defaultAnthropicModel
+		}
+		return aiCommitSettings{
+			provider: aiProviderAnthropic,
+			model:    model,
+			envKey:   "ANTHROPIC_API_KEY",
+		}
+	}
+}
+
+// GenerateAICommitMessage calls the configured LLM provider to create
 // a commit message based on the staged changes.
 //
 // Returns the generated message, or an empty string if:
@@ -92,21 +171,23 @@ func (gui *Gui) GenerateAICommitMessage() string {
 	gui.c.LogAction("Generate AI Commit Message")
 	aiConfig := gui.Config.GetUserConfig().Git.AI
 
-	// Check if AI commits are enabled
 	if !aiConfig.Enabled {
 		gui.c.LogCommand("AI commit generation is disabled in config", false)
 		return ""
 	}
 
-	// Get API key from .env file in the repo root
-	apiKey, err := loadEnvValue("ANTHROPIC_API_KEY")
+	settings := resolveAICommitSettings(aiConfig)
+	if aiConfig.Provider != "" && strings.ToLower(strings.TrimSpace(aiConfig.Provider)) != settings.provider {
+		gui.c.LogCommand(fmt.Sprintf("Unknown AI provider %q, using anthropic", aiConfig.Provider), false)
+	}
+
+	apiKey, err := loadEnvValue(settings.envKey)
 	if err != nil || apiKey == "" {
-		gui.c.LogCommand(fmt.Sprintf("Error: ANTHROPIC_API_KEY not found in .env file: %v", err), false)
+		gui.c.LogCommand(fmt.Sprintf("Error: %s not found in .env file: %v", settings.envKey, err), false)
 		gui.c.Toast(fmt.Sprintf("AI commit failed: %v", err))
 		return ""
 	}
 
-	// Get the staged diff
 	gui.c.LogCommand("Getting staged diff...", false)
 	gui.c.Toast("Generating AI commit message...")
 	diff, err := gui.getStagedDiff()
@@ -123,7 +204,6 @@ func (gui *Gui) GenerateAICommitMessage() string {
 		return ""
 	}
 
-	// Get prompt from config or use default
 	prompt := aiConfig.Prompt
 	if prompt == "" {
 		prompt = defaultCommitPrompt
@@ -132,23 +212,19 @@ func (gui *Gui) GenerateAICommitMessage() string {
 		gui.c.LogCommand("Using custom prompt from config", false)
 	}
 
-	// Build the full prompt with diff
 	fullPrompt := fmt.Sprintf("%s\n\n```diff\n%s\n```", prompt, diff)
 
-	// Set timeout (default to 10 seconds if not configured)
 	timeout := aiConfig.Timeout
 	if timeout == 0 {
 		timeout = 10
 	}
 
-	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	// Make API call
-	gui.c.LogCommand(fmt.Sprintf("Calling Anthropic API (timeout: %ds)...", timeout), false)
+	gui.c.LogCommand(fmt.Sprintf("Calling %s API (%s, timeout: %ds)...", settings.provider, settings.model, timeout), false)
 	startTime := time.Now()
-	message, err := gui.callAnthropicAPI(ctx, apiKey, fullPrompt)
+	message, err := gui.callCommitMessageAPI(ctx, settings, apiKey, fullPrompt)
 	elapsed := time.Since(startTime)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -164,13 +240,21 @@ func (gui *Gui) GenerateAICommitMessage() string {
 
 	gui.c.LogCommand(fmt.Sprintf("AI generated commit message (%d characters) (%dms)", len(message), elapsed.Milliseconds()), false)
 
-	// Clean markdown formatting (backticks, code fences)
 	message = cleanMarkdownFormatting(message)
 
 	gui.c.LogCommand("Successfully generated and cleaned commit message", false)
 	gui.c.Toast("AI commit message generated successfully")
 
 	return message
+}
+
+func (gui *Gui) callCommitMessageAPI(ctx context.Context, settings aiCommitSettings, apiKey string, prompt string) (string, error) {
+	switch settings.provider {
+	case aiProviderGemini:
+		return gui.callGeminiAPI(ctx, settings.model, apiKey, prompt)
+	default:
+		return gui.callAnthropicAPI(ctx, settings.model, apiKey, prompt)
+	}
 }
 
 // getStagedDiff retrieves the diff of staged changes
@@ -184,11 +268,10 @@ func (gui *Gui) getStagedDiff() (string, error) {
 }
 
 // callAnthropicAPI makes a direct HTTP call to the Anthropic API
-func (gui *Gui) callAnthropicAPI(ctx context.Context, apiKey string, prompt string) (string, error) {
-	// Build request
+func (gui *Gui) callAnthropicAPI(ctx context.Context, model string, apiKey string, prompt string) (string, error) {
 	reqBody := anthropicRequest{
-		Model:     "claude-sonnet-4-5-20250929",
-		MaxTokens: 500,
+		Model:     model,
+		MaxTokens: defaultAIMaxTokens,
 		Messages: []anthropicMessage{
 			{
 				Role:    "user",
@@ -202,7 +285,6 @@ func (gui *Gui) callAnthropicAPI(ctx context.Context, apiKey string, prompt stri
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -212,7 +294,6 @@ func (gui *Gui) callAnthropicAPI(ctx context.Context, apiKey string, prompt stri
 	req.Header.Set("x-api-key", apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	// Make request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -220,18 +301,15 @@ func (gui *Gui) callAnthropicAPI(ctx context.Context, apiKey string, prompt stri
 	}
 	defer resp.Body.Close()
 
-	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Check status code
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response
 	var apiResp anthropicResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		return "", fmt.Errorf("failed to parse response: %w", err)
@@ -246,6 +324,67 @@ func (gui *Gui) callAnthropicAPI(ctx context.Context, apiKey string, prompt stri
 	}
 
 	return apiResp.Content[0].Text, nil
+}
+
+// callGeminiAPI makes a direct HTTP call to the Google Gemini API
+func (gui *Gui) callGeminiAPI(ctx context.Context, model string, apiKey string, prompt string) (string, error) {
+	reqBody := geminiRequest{
+		Contents: []geminiContent{
+			{
+				Parts: []geminiPart{
+					{Text: prompt},
+				},
+			},
+		},
+		GenerationConfig: geminiGenerationConfig{
+			MaxOutputTokens: defaultAIMaxTokens,
+		},
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", model)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var apiResp geminiResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if apiResp.Error != nil {
+		return "", fmt.Errorf("API error: %s", apiResp.Error.Message)
+	}
+
+	if len(apiResp.Candidates) == 0 || len(apiResp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("API returned no content")
+	}
+
+	return apiResp.Candidates[0].Content.Parts[0].Text, nil
 }
 
 // loadEnvValue reads a key from the .env file in the lazygit config directory.
@@ -269,9 +408,8 @@ func loadEnvValue(key string) (string, error) {
 }
 
 // cleanMarkdownFormatting removes markdown code fences and backticks that
-// Claude sometimes adds to responses
+// LLMs sometimes add to responses
 func cleanMarkdownFormatting(message string) string {
-	// Remove markdown code fences (```language or just ```)
 	re1 := regexp.MustCompile(`(?m)^` + "```" + `\w*\n?`)
 	message = re1.ReplaceAllString(message, "")
 
@@ -284,11 +422,9 @@ func cleanMarkdownFormatting(message string) string {
 	re4 := regexp.MustCompile("```" + `$`)
 	message = re4.ReplaceAllString(message, "")
 
-	// Remove inline backticks at start/end of message
 	message = strings.Trim(message, "`")
 	message = strings.TrimSpace(message)
 
-	// Remove any "**Rationale:**" or similar sections that Claude adds
 	re5 := regexp.MustCompile(`(?s)\n\*\*.*?\*\*:.*`)
 	message = re5.ReplaceAllString(message, "")
 

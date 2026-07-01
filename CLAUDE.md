@@ -20,9 +20,9 @@
 
 ## Custom Modifications (fork-specific)
 
-- **AI commit messages**: `pkg/gui/ai_commit.go` — calls Anthropic API to generate commit messages from staged diff
-- **API key**: stored in `~/.config/lazygit/.env` as `ANTHROPIC_API_KEY`
-- **Config**: `pkg/config/user_config.go` `AIConfig` struct — enabled, prompt, timeout, fallbackOnError
+- **AI commit messages**: `pkg/gui/ai_commit.go` — calls Anthropic or Gemini API to generate commit messages from staged diff
+- **API keys**: stored in `~/.config/lazygit/.env` as `ANTHROPIC_API_KEY` or `GEMINI_API_KEY`
+- **Config**: `pkg/config/user_config.go` `AIConfig` struct — enabled, provider, model, prompt, timeout, fallbackOnError
 - **UI**: AI indicator icon (󰚩) in Files panel title and information panel
 
 ## Architecture
@@ -37,6 +37,6 @@
 
 - Binary at `./lazygit` is what `lg` alias points to — must `just build` after code changes
 - Config dir is `~/.config/lazygit/` (XDG), not `~/Library/Application Support/lazygit/`
-- Lazygit runs inside other repos — `git rev-parse` resolves to the *target* repo, not lazygit source. Use `config.ConfigDir()` for lazygit's own files.
+- Lazygit runs inside other repos — `git rev-parse` resolves to the _target_ repo, not lazygit source. Use `config.ConfigDir()` for lazygit's own files.
 - Integration tests need `go generate ./...` if test list changes
 - User prefers Justfile for custom build targets; don't add to Makefile

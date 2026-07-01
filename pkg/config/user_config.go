@@ -394,6 +394,10 @@ type CommitPrefixConfig struct {
 type AIConfig struct {
 	// If true, enable AI-powered commit message generation
 	Enabled bool `yaml:"enabled"`
+	// LLM provider: 'anthropic' (default) or 'gemini'
+	Provider string `yaml:"provider" jsonschema:"enum=anthropic,enum=gemini"`
+	// Model override. Defaults to claude-sonnet-4-5-20250929 (anthropic) or gemini-2.5-flash (gemini)
+	Model string `yaml:"model"`
 	// Custom prompt for commit message generation (optional)
 	Prompt string `yaml:"prompt"`
 	// Timeout in seconds for API calls
