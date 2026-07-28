@@ -1,5 +1,7 @@
 # lazygit (personal fork)
 
+Also read AGENTS.md (upstream's agent guide) and follow it.
+
 ## Build & Run
 
 - `just build` — build binary with version info to `./lazygit`
@@ -40,4 +42,5 @@
 - Config dir is `~/.config/lazygit/` (XDG), not `~/Library/Application Support/lazygit/`
 - Lazygit runs inside other repos — `git rev-parse` resolves to the _target_ repo, not lazygit source. Use `config.ConfigDir()` for lazygit's own files.
 - Integration tests need `go generate ./...` if test list changes
-- User prefers Justfile for custom build targets; don't add to Makefile
+- Custom build targets live in `justfile` (upstream's, lowercase — merged with our recipes: `build` is our version-stamped build, upstream's debug build is `build-debug`, plus `smoke-ai`); don't add to Makefile
+- Generated docs/schema for master live in `docs-master/` and `schema-master/` (upstream convention); `docs/` tracks the latest release

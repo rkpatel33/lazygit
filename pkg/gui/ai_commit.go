@@ -63,8 +63,8 @@ type anthropicError struct {
 
 // Gemini API types for making direct API calls
 type geminiRequest struct {
-	Contents         []geminiContent         `json:"contents"`
-	GenerationConfig geminiGenerationConfig  `json:"generationConfig"`
+	Contents         []geminiContent        `json:"contents"`
+	GenerationConfig geminiGenerationConfig `json:"generationConfig"`
 }
 
 type geminiContent struct {

@@ -22,7 +22,7 @@ import (
 	"github.com/jesseduffield/lazycore/pkg/utils"
 	"github.com/jesseduffield/lazygit/pkg/app"
 	"github.com/jesseduffield/lazygit/pkg/config"
-	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
+	"github.com/jesseduffield/lazygit/pkg/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/i18n"
 	"github.com/samber/lo"
@@ -146,7 +146,7 @@ func getBindingSections(bindings []*types.Binding, tr *i18n.TranslationSet) []*b
 			return false
 		}
 
-		return (binding.Description != "" || binding.Alternative != "") && binding.Key != nil
+		return (binding.Description != "" || binding.Alternative != "") && len(binding.Keys) > 0
 	})
 
 	bindingsByHeader := lo.GroupBy(bindingsToDisplay, func(binding *types.Binding) header {
@@ -157,7 +157,7 @@ func getBindingSections(bindings []*types.Binding, tr *i18n.TranslationSet) []*b
 		bindingsByHeader,
 		func(header header, hBindings []*types.Binding) headerWithBindings {
 			uniqBindings := lo.UniqBy(hBindings, func(binding *types.Binding) string {
-				return binding.Description + keybindings.LabelFromKey(binding.Key)
+				return binding.Description + keyLabels(binding.Keys)
 			})
 
 			return headerWithBindings{
@@ -195,28 +195,33 @@ func getHeader(binding *types.Binding, tr *i18n.TranslationSet) header {
 }
 
 func formatSections(tr *i18n.TranslationSet, bindingSections []*bindingSection) string {
-	content := fmt.Sprintf("# Lazygit %s\n", tr.Keybindings)
-
-	content += fmt.Sprintf("\n%s\n", italicize(tr.KeybindingsLegend))
+	var content strings.Builder
+	content.WriteString(fmt.Sprintf("# Lazygit %s\n", tr.Keybindings))
 
 	for _, section := range bindingSections {
-		content += formatTitle(section.title)
-		content += "| Key | Action | Info |\n"
-		content += "|-----|--------|-------------|\n"
+		content.WriteString(formatTitle(section.title))
+		content.WriteString("| Key | Action | Info |\n")
+		content.WriteString("|-----|--------|-------------|\n")
 		for _, binding := range section.bindings {
-			content += formatBinding(binding)
+			content.WriteString(formatBinding(binding))
 		}
 	}
 
-	return content
+	return content.String()
 }
 
 func formatTitle(title string) string {
 	return fmt.Sprintf("\n## %s\n\n", title)
 }
 
+func keyLabels(keys []gocui.Key) string {
+	return strings.Join(lo.Map(keys, func(k gocui.Key, _ int) string {
+		return config.LabelForKey(k)
+	}), ", ")
+}
+
 func formatBinding(binding *types.Binding) string {
-	action := keybindings.LabelFromKey(binding.Key)
+	action := keyLabels(binding.Keys)
 	description := binding.Description
 	if binding.Alternative != "" {
 		action += fmt.Sprintf(" (%s)", binding.Alternative)
@@ -233,8 +238,4 @@ func formatBinding(binding *types.Binding) string {
 	// Use backticks for keyboard keys. Two backticks are needed with an inner space
 	//  to escape a key that is itself a backtick.
 	return fmt.Sprintf("| `` %s `` | %s | %s |\n", action, description, tooltip)
-}
-
-func italicize(str string) string {
-	return fmt.Sprintf("_%s_", str)
 }

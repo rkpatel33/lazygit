@@ -38,10 +38,10 @@ func TestSmokeAICommitProviders(t *testing.T) {
 	ran := false
 
 	for _, tc := range []struct {
-		name     string
-		envKey   string
-		model    string
-		call     func(string) (string, error)
+		name   string
+		envKey string
+		model  string
+		call   func(string) (string, error)
 	}{
 		{
 			name:   "anthropic",

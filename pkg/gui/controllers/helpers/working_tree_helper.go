@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
-	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/config"
+	"github.com/jesseduffield/lazygit/pkg/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
@@ -72,12 +73,35 @@ func AnyTrackedFilesExceptSubmodules(files []*models.File, submoduleConfigs []*m
 	return lo.SomeBy(files, func(f *models.File) bool { return f.Tracked && !f.IsSubmodule(submoduleConfigs) })
 }
 
+func isContainedInPath(candidate string, path string) bool {
+	return (
+	// If the path is the repo root (appears as "/" in the UI), then all candidates are contained in it
+	path == "." ||
+		// Exact match; will only be true for files
+		candidate == path ||
+		// Match for files within a directory. We need to match the trailing slash to avoid
+		// matching files with longer names.
+		strings.HasPrefix(candidate, path+"/"))
+}
+
+func AnyTrackedFilesInPathExceptSubmodules(path string, files []*models.File, submoduleConfigs []*models.SubmoduleConfig) bool {
+	return lo.SomeBy(files, func(f *models.File) bool {
+		return f.Tracked && isContainedInPath(f.GetPath(), path) && !f.IsSubmodule(submoduleConfigs)
+	})
+}
+
 func (self *WorkingTreeHelper) IsWorkingTreeDirtyExceptSubmodules() bool {
 	return IsWorkingTreeDirtyExceptSubmodules(self.c.Model().Files, self.c.Model().Submodules)
 }
 
 func IsWorkingTreeDirtyExceptSubmodules(files []*models.File, submoduleConfigs []*models.SubmoduleConfig) bool {
 	return AnyStagedFilesExceptSubmodules(files, submoduleConfigs) || AnyTrackedFilesExceptSubmodules(files, submoduleConfigs)
+}
+
+func GetUnstagedFilesExceptSubmodules(files []*models.File, submoduleConfigs []*models.SubmoduleConfig) []string {
+	return lo.FilterMap(files, func(f *models.File, _ int) (string, bool) {
+		return f.Path, f.HasUnstagedChanges && f.Tracked && !f.IsSubmodule(submoduleConfigs)
+	})
 }
 
 func (self *WorkingTreeHelper) FileForSubmodule(submodule *models.SubmoduleConfig) *models.File {
@@ -91,18 +115,10 @@ func (self *WorkingTreeHelper) FileForSubmodule(submodule *models.SubmoduleConfi
 }
 
 func (self *WorkingTreeHelper) OpenMergeTool() error {
-	self.c.Confirm(types.ConfirmOpts{
-		Title:  self.c.Tr.MergeToolTitle,
-		Prompt: self.c.Tr.MergeToolPrompt,
-		HandleConfirm: func() error {
-			self.c.LogAction(self.c.Tr.Actions.OpenMergeTool)
-			return self.c.RunSubprocessAndRefresh(
-				self.c.Git().WorkingTree.OpenMergeToolCmdObj(),
-			)
-		},
-	})
-
-	return nil
+	self.c.LogAction(self.c.Tr.Actions.OpenMergeTool)
+	return self.c.RunSubprocessAndRefresh(
+		self.c.Git().WorkingTree.OpenMergeToolCmdObj(),
+	)
 }
 
 func (self *WorkingTreeHelper) HandleCommitPressWithMessage(initialMessage string, forceSkipHooks bool) error {
@@ -132,11 +148,16 @@ func (self *WorkingTreeHelper) HandleCommitPressWithMessage(initialMessage strin
 func (self *WorkingTreeHelper) handleCommit(summary string, description string, forceSkipHooks bool) error {
 	cmdObj := self.c.Git().Commit.CommitCmdObj(summary, description, forceSkipHooks)
 	self.c.LogAction(self.c.Tr.Actions.Commit)
-	return self.gpgHelper.WithGpgHandling(cmdObj, git_commands.CommitGpgSign, self.c.Tr.CommittingStatus,
+	return self.gpgHelper.WithGpgHandlingAndSelectHeadCommit(cmdObj, git_commands.CommitGpgSign, self.c.Tr.CommittingStatus,
 		func() error {
-			self.commitsHelper.ClearPreservedCommitMessage()
+			// This runs on a worker when the commit output is streamed, so
+			// bounce the preserved-message write to the UI thread.
+			self.c.OnUIThread(func() error {
+				self.commitsHelper.ClearPreservedCommitMessage()
+				return nil
+			})
 			return nil
-		}, nil)
+		})
 }
 
 func (self *WorkingTreeHelper) switchFromCommitMessagePanelToEditor(filepath string, forceSkipHooks bool) error {
@@ -204,11 +225,10 @@ func (self *WorkingTreeHelper) HandleCommitPress() error {
 }
 
 func (self *WorkingTreeHelper) handleCommitPressWithoutAI() error {
-	// Fall back to preserved message if AI didn't generate
-	message := self.c.Contexts().CommitMessage.GetPreservedMessageAndLogError()
-
+	var initialMessage string
+	preservedMessage := self.c.Contexts().CommitMessage.GetPreservedMessageAndLogError()
 	// If no preserved message, try commit prefix configs
-	if message == "" {
+	if preservedMessage == "" {
 		commitPrefixConfigs := self.commitPrefixConfigsForRepo()
 		for _, commitPrefixConfig := range commitPrefixConfigs {
 			prefixPattern := commitPrefixConfig.Pattern
@@ -223,26 +243,33 @@ func (self *WorkingTreeHelper) handleCommitPressWithoutAI() error {
 			}
 
 			if rgx.MatchString(branchName) {
-				prefix := rgx.ReplaceAllString(branchName, prefixReplace)
-				message = prefix
+				initialMessage = rgx.ReplaceAllString(branchName, prefixReplace)
 				break
 			}
 		}
 	}
 
-	return self.HandleCommitPressWithMessage(message, false)
+	return self.HandleCommitPressWithMessage(initialMessage, false)
 }
 
 func (self *WorkingTreeHelper) WithEnsureCommittableFiles(handler func() error) error {
-	if err := self.prepareFilesForCommit(); err != nil {
-		return err
-	}
-
 	if len(self.c.Model().Files) == 0 {
 		return errors.New(self.c.Tr.NoFilesStagedTitle)
 	}
 
 	if !self.AnyStagedFiles() {
+		if self.c.UserConfig().Gui.SkipNoStagedFilesWarning {
+			self.c.LogAction(self.c.Tr.Actions.StageAllFiles)
+			if err := self.c.Git().WorkingTree.StageAll(false); err != nil {
+				return err
+			}
+			self.c.Refresh(types.RefreshOptions{
+				Scope: []types.RefreshableView{types.FILES},
+				Then:  handler,
+			})
+			return nil
+		}
+
 		return self.promptToStageAllAndRetry(handler)
 	}
 
@@ -258,31 +285,11 @@ func (self *WorkingTreeHelper) promptToStageAllAndRetry(retry func() error) erro
 			if err := self.c.Git().WorkingTree.StageAll(false); err != nil {
 				return err
 			}
-			self.syncRefresh()
+			self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
 
 			return retry()
 		},
 	})
-
-	return nil
-}
-
-// for when you need to refetch files before continuing an action. Runs synchronously.
-func (self *WorkingTreeHelper) syncRefresh() {
-	self.c.Refresh(types.RefreshOptions{Mode: types.SYNC, Scope: []types.RefreshableView{types.FILES}})
-}
-
-func (self *WorkingTreeHelper) prepareFilesForCommit() error {
-	noStagedFiles := !self.AnyStagedFiles()
-	if noStagedFiles && self.c.UserConfig().Gui.SkipNoStagedFilesWarning {
-		self.c.LogAction(self.c.Tr.Actions.StageAllFiles)
-		err := self.c.Git().WorkingTree.StageAll(false)
-		if err != nil {
-			return err
-		}
-
-		self.syncRefresh()
-	}
 
 	return nil
 }
@@ -378,7 +385,7 @@ func (self *WorkingTreeHelper) CreateMergeConflictMenu(selectedFilepaths []strin
 		}
 
 		err := self.c.Git().WorkingTree.StageFiles(selectedFilepaths, nil)
-		self.c.Refresh(types.RefreshOptions{Mode: types.SYNC, Scope: []types.RefreshableView{types.FILES}})
+		self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
 		return err
 	}
 
@@ -394,7 +401,7 @@ func (self *WorkingTreeHelper) CreateMergeConflictMenu(selectedFilepaths []strin
 				OnPress: func() error {
 					return onMergeStrategySelected("--ours")
 				},
-				Key: 'c',
+				Keys: menuKey('c'),
 			},
 			{
 				LabelColumns: []string{
@@ -404,7 +411,7 @@ func (self *WorkingTreeHelper) CreateMergeConflictMenu(selectedFilepaths []strin
 				OnPress: func() error {
 					return onMergeStrategySelected("--theirs")
 				},
-				Key: 'i',
+				Keys: menuKey('i'),
 			},
 			{
 				LabelColumns: []string{
@@ -414,7 +421,7 @@ func (self *WorkingTreeHelper) CreateMergeConflictMenu(selectedFilepaths []strin
 				OnPress: func() error {
 					return onMergeStrategySelected("--union")
 				},
-				Key: 'b',
+				Keys: menuKey('b'),
 			},
 			{
 				LabelColumns: []string{
@@ -422,7 +429,7 @@ func (self *WorkingTreeHelper) CreateMergeConflictMenu(selectedFilepaths []strin
 					cmdColor.Sprint("git mergetool"),
 				},
 				OnPress: self.OpenMergeTool,
-				Key:     'm',
+				Keys:    menuKey('m'),
 			},
 		},
 	})

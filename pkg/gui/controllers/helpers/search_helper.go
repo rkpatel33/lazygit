@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jesseduffield/gocui"
+	"github.com/jesseduffield/lazygit/pkg/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
-	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/theme"
 	"github.com/jesseduffield/lazygit/pkg/utils"
@@ -32,6 +31,8 @@ func NewSearchHelper(
 
 func (self *SearchHelper) OpenFilterPrompt(context types.IFilterableContext) error {
 	state := self.searchState()
+
+	state.PrevSearchIndex = -1
 
 	state.Context = context
 
@@ -73,7 +74,7 @@ func (self *SearchHelper) DisplayFilterStatus(context types.IFilterableContext) 
 
 	promptView := self.promptView()
 	keybindingConfig := self.c.UserConfig().Keybinding
-	promptView.SetContent(fmt.Sprintf("matches for '%s' ", searchString) + theme.OptionsFgColor.Sprintf(self.c.Tr.ExitTextFilterMode, keybindings.Label(keybindingConfig.Universal.Return)))
+	promptView.SetContent(fmt.Sprintf("matches for '%s' ", searchString) + theme.OptionsFgColor.Sprintf(self.c.Tr.ExitTextFilterMode, keybindingConfig.Universal.Return))
 }
 
 func (self *SearchHelper) DisplaySearchStatus(context types.ISearchableContext) {
@@ -108,18 +109,13 @@ func (self *SearchHelper) Confirm() error {
 		return self.CancelPrompt()
 	}
 
-	var err error
 	switch state.SearchType() {
 	case types.SearchTypeFilter:
 		self.ConfirmFilter()
 	case types.SearchTypeSearch:
-		err = self.ConfirmSearch()
+		self.ConfirmSearch()
 	case types.SearchTypeNone:
 		self.c.Context().Pop()
-	}
-
-	if err != nil {
-		return err
 	}
 
 	return self.c.ResetKeybindings()
@@ -144,13 +140,13 @@ func (self *SearchHelper) ConfirmFilter() {
 	self.c.Context().Pop()
 }
 
-func (self *SearchHelper) ConfirmSearch() error {
+func (self *SearchHelper) ConfirmSearch() {
 	state := self.searchState()
 
 	context, ok := state.Context.(types.ISearchableContext)
 	if !ok {
 		self.c.Log.Warnf("Context %s is searchable", state.Context.GetKey())
-		return nil
+		return
 	}
 
 	searchString := self.promptContent()
@@ -161,7 +157,7 @@ func (self *SearchHelper) ConfirmSearch() error {
 
 	self.c.Context().Pop()
 
-	return context.GetView().Search(searchString, modelSearchResults(context))
+	context.GetView().Search(searchString, modelSearchResults(context))
 }
 
 func modelSearchResults(context types.ISearchableContext) []gocui.SearchPosition {
@@ -243,7 +239,7 @@ func (self *SearchHelper) ReApplyFilter(context types.Context) {
 	filterableContext, ok := context.(types.IFilterableContext)
 	if ok {
 		state := self.searchState()
-		if context == state.Context {
+		if context == state.Context && self.c.Context().Current().GetKey() == self.c.Contexts().Search.GetKey() {
 			filterableContext.SetSelection(0)
 			filterableContext.GetView().SetOriginY(0)
 		}

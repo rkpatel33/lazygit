@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"github.com/jesseduffield/gocui"
+	"github.com/jesseduffield/lazygit/pkg/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 )
 
@@ -117,6 +117,8 @@ func (gui *Gui) refreshMainViews(opts types.RefreshMainOpts) {
 		}
 	}
 
+	gui.moveMainContextPairToTop(opts.Pair)
+
 	if opts.Main != nil {
 		gui.RefreshMainView(opts.Main, opts.Pair.Main)
 	}
@@ -126,8 +128,6 @@ func (gui *Gui) refreshMainViews(opts types.RefreshMainOpts) {
 	} else if opts.Pair.Secondary != nil {
 		opts.Pair.Secondary.GetView().Clear()
 	}
-
-	gui.moveMainContextPairToTop(opts.Pair)
 
 	gui.splitMainPanel(opts.Secondary != nil)
 }

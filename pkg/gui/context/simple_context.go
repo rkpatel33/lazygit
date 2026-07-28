@@ -1,7 +1,7 @@
 package context
 
 import (
-	"github.com/jesseduffield/gocui"
+	"github.com/jesseduffield/lazygit/pkg/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 )
 
@@ -54,7 +54,13 @@ func (self *SimpleContext) HandleFocusLost(opts types.OnFocusLostOpts) {
 	}
 }
 
-func (self *SimpleContext) FocusLine() {
+func (self *SimpleContext) HandleQuit() {
+	for _, fn := range self.onQuitFns {
+		fn()
+	}
+}
+
+func (self *SimpleContext) FocusLine(scrollIntoView bool) {
 }
 
 func (self *SimpleContext) HandleRender() {
