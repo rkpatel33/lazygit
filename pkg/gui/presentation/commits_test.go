@@ -507,6 +507,26 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 				`),
 		},
 		{
+			testName: "relative date column shown in normal mode when commits have timestamps",
+			commitOpts: []models.NewCommitOpts{
+				{Name: "commit1", Hash: "hash1", UnixTimestamp: 1577844184, AuthorName: "Jesse Duffield"},
+				{Name: "commit2", Hash: "hash2", UnixTimestamp: 1576844184, AuthorName: "Jesse Duffield"},
+			},
+			fullDescription:           false,
+			timeFormat:                "2006-01-02",
+			shortTimeFormat:           "3:04PM",
+			startIdx:                  0,
+			endIdx:                    2,
+			showGraph:                 false,
+			bisectInfo:                git_commands.NewNullBisectInfo(),
+			cherryPickedCommitHashSet: set.New[string](),
+			now:                       time.Date(2020, 1, 1, 5, 3, 4, 0, time.UTC),
+			expected: formatExpected(`
+		hash1 3h JD commit1
+		hash2 1w JD commit2
+						`),
+		},
+		{
 			testName: "custom time format",
 			commitOpts: []models.NewCommitOpts{
 				{Name: "commit1", Hash: "hash1", UnixTimestamp: 1577844184, AuthorName: "Jesse Duffield"},

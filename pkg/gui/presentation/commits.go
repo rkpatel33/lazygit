@@ -376,10 +376,17 @@ func displayCommit(
 		divergenceString = hashColor.Sprint(icons.IconForCommit(commit))
 	}
 
+	// Fork customization: in normal mode, show a compact relative age (4w, 3h)
+	// like the branches panel. Skip commits without a timestamp (e.g. rebase
+	// todo entries) so we don't render the unix epoch's age.
 	descriptionString := ""
 	if fullDescription {
 		descriptionString = style.FgBlue.Sprint(
 			utils.UnixToDateSmart(now, commit.UnixTimestamp, timeFormat, shortTimeFormat),
+		)
+	} else if commit.UnixTimestamp != 0 {
+		descriptionString = style.FgBlue.Sprint(
+			utils.UnixToTimeAgoAt(now, commit.UnixTimestamp),
 		)
 	}
 

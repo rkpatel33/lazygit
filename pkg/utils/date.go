@@ -10,6 +10,12 @@ func UnixToTimeAgo(timestamp int64) string {
 	return formatSecondsAgo(now - timestamp)
 }
 
+// Like UnixToTimeAgo, but relative to an explicit reference time so that
+// callers which already thread a `now` through can stay deterministic in tests.
+func UnixToTimeAgoAt(now time.Time, timestamp int64) string {
+	return formatSecondsAgo(now.Unix() - timestamp)
+}
+
 const (
 	SECONDS_IN_SECOND = 1
 	SECONDS_IN_MINUTE = 60

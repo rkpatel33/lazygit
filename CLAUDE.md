@@ -24,6 +24,7 @@
 - **API keys**: stored in `~/.config/lazygit/.env` as `ANTHROPIC_API_KEY` or `GEMINI_API_KEY`
 - **Config**: `pkg/config/user_config.go` `AIConfig` struct — enabled, provider, model, prompt, timeout, fallbackOnError
 - **UI**: AI indicator icon (󰚩) in Files panel title and information panel
+- **Commit age column**: `pkg/gui/presentation/commits.go` — commits panel shows a compact relative age (`4w`, `3h`) in normal screen mode via `utils.UnixToTimeAgoAt`; enlarged mode (`+`) keeps upstream's absolute dates
 
 ## Architecture
 
